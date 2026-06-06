@@ -1,0 +1,6 @@
+{
+  "name": "seneFashion",
+  "description": "Portail vitrine clients et outil complet de gestion : catalogue, suivi de caisse (POS), entrées/sorties de stock, dépenses et CRM.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
