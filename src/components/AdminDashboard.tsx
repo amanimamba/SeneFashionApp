@@ -10,7 +10,7 @@ import HighchartsReact from 'highcharts-react-official';
 import { 
   Product, StockMovement, Sale, Expense, Client, AuditLog, SystemSettings, CategoryType, MetalType 
 } from '../types';
-import { calculateProductPrice } from '../data';
+import { calculateProductPrice, calculateTVA } from '../data';
 import { 
   TrendingUp, Library, ShoppingCart, RefreshCw, BadgeEuro, Users, 
   Settings, UserPlus, Trash, Plus, Check, AlertTriangle, Printer, FileText, 
@@ -2342,23 +2342,39 @@ export default function AdminDashboard({
                   <div className="flex justify-between text-xs text-stone-400">
                     <span>Brut Total :</span>
                     <span className="font-mono">
-                      {posCart.reduce((acc, item) => acc + (calculateProductPrice(item.product, settings) * item.qty), 0).toLocaleString('fr-FR')} €
+                      {posCart.reduce((acc, item) => acc + (calculateProductPrice(item.product, settings) * item.qty), 0).toLocaleString('fr-FR')} BIF
                     </span>
                   </div>
                   <div className="flex justify-between text-xs text-rose-500">
                     <span>Remises accordées :</span>
                     <span className="font-mono">
-                      -{posCart.reduce((acc, item) => acc + item.discount, 0).toLocaleString('fr-FR')} €
+                      -{posCart.reduce((acc, item) => acc + item.discount, 0).toLocaleString('fr-FR')} BIF
                     </span>
                   </div>
+                  
+                  {settings.apply_tva_on_sale && (
+                    <div className="flex justify-between text-xs text-amber-600">
+                      <span>TVA ({settings.tva_percentage}%) :</span>
+                      <span className="font-mono">
+                        {calculateTVA(posCart.reduce((acc, item) => {
+                          const base = calculateProductPrice(item.product, settings) * item.qty;
+                          return acc + base - item.discount;
+                        }, 0), settings).toLocaleString('fr-FR')} BIF
+                      </span>
+                    </div>
+                  )}
                   
                   <div className="flex justify-between items-baseline pt-2 border-t border-stone-800">
                     <span className="text-sm font-semibold text-[#D4AF37]">Net Final à encaisser :</span>
                     <span className="font-serif text-2xl font-bold font-mono text-[#D4AF37]">
-                      {posCart.reduce((acc, item) => {
-                        const base = calculateProductPrice(item.product, settings) * item.qty;
-                        return acc + base - item.discount;
-                      }, 0).toLocaleString('fr-FR')} €
+                      {(() => {
+                        const netTotal = posCart.reduce((acc, item) => {
+                          const base = calculateProductPrice(item.product, settings) * item.qty;
+                          return acc + base - item.discount;
+                        }, 0);
+                        const tva = calculateTVA(netTotal, settings);
+                        return (netTotal + tva).toLocaleString('fr-FR');
+                      })()} BIF
                     </span>
                   </div>
 
@@ -2366,10 +2382,12 @@ export default function AdminDashboard({
                     <div className="flex justify-between text-xs text-amber-500 font-bold bg-[#2C2114]/40 p-2.5 rounded border border-[#D4AF37]/25 mt-2">
                       <span>Reste à payer (Solde futur) :</span>
                       <span>
-                        {Math.max(0, posCart.reduce((acc, item) => {
+                    {Math.max(0, posCart.reduce((acc, item) => {
                           const base = calculateProductPrice(item.product, settings) * item.qty;
-                          return acc + base - item.discount;
-                        }, 0) - posDownPaymentAmount).toLocaleString('fr-FR')} €
+                          const netTotalBeforeTVA = base - item.discount;
+                          const tva = calculateTVA(netTotalBeforeTVA, settings);
+                          return acc + base - item.discount + tva;
+                        }, 0) - posDownPaymentAmount).toLocaleString('fr-FR')} BIF
                       </span>
                     </div>
                   )}
@@ -3184,6 +3202,62 @@ export default function AdminDashboard({
                   className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-4 py-2 font-mono"
                 />
                 <p className="text-[9px] text-stone-400 italic leading-none">Indiquez l'indicatif pays complet sans le symbole + ou les espaces (ex: 33612345678 pour la France)</p>
+              </div>
+
+                            <div className="space-y-4">
+                <span className="block text-[10px] uppercase font-bold text-stone-400">Informations Entreprise & Taxations</span>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="block text-[9px] font-bold text-stone-500">NIF (Numéro d'Identification Fiscale)</span>
+                    <input
+                      type="text"
+                      value={tempSettings.nif}
+                      onChange={(e) => setTempSettings({ ...tempSettings, nif: e.target.value })}
+                      className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-1.5 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                     <span className="block text-[9px] font-bold text-stone-500">TVA (%)</span>
+                     <input
+                      type="number"
+                      value={tempSettings.tva_percentage}
+                      onChange={(e) => setTempSettings({ ...tempSettings, tva_percentage: Number(e.target.value) })}
+                      className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-1.5 font-mono"
+                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="block text-[9px] font-bold text-stone-500">Email Contact</span>
+                    <input
+                      type="email"
+                      value={tempSettings.company_email}
+                      onChange={(e) => setTempSettings({ ...tempSettings, company_email: e.target.value })}
+                      className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-1.5 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                     <span className="block text-[9px] font-bold text-stone-500">Téléphone Entreprise</span>
+                     <input
+                      type="text"
+                      value={tempSettings.company_phone}
+                      onChange={(e) => setTempSettings({ ...tempSettings, company_phone: e.target.value })}
+                      className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-1.5 font-mono"
+                     />
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={tempSettings.apply_tva_on_sale}
+                    onChange={(e) => setTempSettings({ ...tempSettings, apply_tva_on_sale: e.target.checked })}
+                    className="h-4 w-4 text-[#AA7C11]"
+                  />
+                  <span className="text-[10px] text-stone-700 font-bold">Appliquer la TVA automatiquement sur les factures de vente</span>
+                </div>
               </div>
 
               <div className="border-t border-stone-100 pt-6 space-y-4">

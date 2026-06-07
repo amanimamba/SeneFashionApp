@@ -23,8 +23,9 @@ export default function Login({ onLoginSuccess, addLog }: LoginProps) {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Standard static administrative credentials as specified in requirement
-    if (username.trim().toLowerCase() === 'admin' && password === 'admin123') {
+    // Standard static administrative credentials
+    // Using email for login
+    if (username.trim().toLowerCase() === 'admin@senefashion.bi' && password === 'admin123') {
       setErrorMessage('');
       onLoginSuccess('Directeur Principal');
       addLog('Connexion réussie', 'L\'administrateur s\'est connecté sur le portail de gestion.');
@@ -63,7 +64,7 @@ export default function Login({ onLoginSuccess, addLog }: LoginProps) {
             <UserCheck className="h-3.5 w-3.5" />
             <span>Accès de Test Prédéfini:</span>
           </div>
-          <p className="font-sans">Identifiant Administrateur : <span className="font-mono text-white select-all bg-black/30 px-1.5 py-0.5 rounded">admin</span></p>
+          <p className="font-sans">Email Administrateur : <span className="font-mono text-white select-all bg-black/30 px-1.5 py-0.5 rounded">admin@senefashion.bi</span></p>
           <p className="font-sans">Mot de passe d'administration : <span className="font-mono text-white select-all bg-black/30 px-1.5 py-0.5 rounded">admin123</span></p>
         </div>
 
@@ -72,12 +73,12 @@ export default function Login({ onLoginSuccess, addLog }: LoginProps) {
           
           <div className="space-y-1.5">
             <label className="block text-[10px] uppercase tracking-wider text-[#C5A880] font-semibold">
-              Identifiant Gérant
+              Email Gérant
             </label>
             <input
-              type="text"
+              type="email"
               required
-              placeholder="Ex: admin"
+              placeholder="Ex: admin@senefashion.bi"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full bg-[#0F0E0C] border border-[#3A3127] focus:border-[#D4AF37] focus:outline-none rounded px-4 py-2.5 text-sm text-stone-100 placeholder-stone-600 transition-all font-sans"

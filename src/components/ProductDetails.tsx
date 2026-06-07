@@ -125,7 +125,7 @@ export default function ProductDetails({ products, settings }: ProductDetailsPro
                 <p className="text-[10px] uppercase text-stone-400 font-bold tracking-widest mb-1.5">Prix Estimé en Magasin (TTC)</p>
                 <div className="flex items-baseline space-x-3 text-stone-900">
                   <span className="font-serif text-3xl sm:text-4xl font-bold text-[#AA7C11]">
-                    {finalPrice.toLocaleString('fr-FR')} €
+                    {finalPrice.toLocaleString('fr-FR')} BIF
                   </span>
                   {product.price_type === 'variable' && (
                     <span className="text-[10px] uppercase tracking-wider text-stone-400 italic">
@@ -250,7 +250,7 @@ export default function ProductDetails({ products, settings }: ProductDetailsPro
                           {s.weight.toFixed(2)} g
                         </span>
                         <span className="font-serif text-sm font-bold text-[#AA7C11]">
-                          {sPrice.toLocaleString('fr-FR')} €
+                          {sPrice.toLocaleString('fr-FR')} BIF
                         </span>
                       </div>
                     </div>

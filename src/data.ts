@@ -183,7 +183,12 @@ export const INITIAL_SETTINGS: SystemSettings = {
   gold_rate_18k: 65.50, // in € per gram
   gold_rate_24k: 84.20, // pure gold
   silver_rate_925: 1.15,
-  platinum_rate: 42.00
+  platinum_rate: 42.00,
+  tva_percentage: 18, 
+  nif: "1000000000",
+  company_phone: "+257 22 00 00 00",
+  company_email: "contact@senefashion.bi",
+  apply_tva_on_sale: true
 };
 
 export const INITIAL_CLIENTS: Client[] = [
@@ -578,4 +583,10 @@ export function calculateProductPrice(product: Product, settings: SystemSettings
   // Formula: weight * rate + labor_cost
   const sum = (product.weight * rate) + product.labor_cost;
   return Math.round(sum * 100) / 100;
+}
+
+// New helper for VAT calculation
+export function calculateTVA(amount: number, settings: SystemSettings): number {
+  if (!settings.apply_tva_on_sale) return 0;
+  return Math.round(amount * (settings.tva_percentage / 100) * 100) / 100;
 }

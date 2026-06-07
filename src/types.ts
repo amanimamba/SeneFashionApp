@@ -94,4 +94,10 @@ export interface SystemSettings {
   gold_rate_24k: number;   // rate per gram
   silver_rate_925: number; // rate per gram
   platinum_rate: number;   // rate per gram
+  // New billing/tax fields for BIF operations
+  tva_percentage: number;
+  nif: string;           // Tax ID
+  company_phone: string;
+  company_email: string;
+  apply_tva_on_sale: boolean;
 }
