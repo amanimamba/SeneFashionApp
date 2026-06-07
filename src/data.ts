@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Product, StockMovement, Sale, Expense, Client, AuditLog, SystemSettings } from './types';
+import { Product, StockMovement, Sale, Expense, Client, AuditLog, SystemSettings, Category, MetalAlliance } from './types';
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
@@ -14,9 +14,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     purity: "18k (750/1000)",
     weight: 4.55,
     components_stones: "Diamant Rond Brillant 0.25ct H-SI",
-    price_type: "variable",
-    labor_cost: 250, // handcraft main d'œuvre
-    price_fixed: 0,
+    price_type: "fixe",
+    labor_cost: 0,
+    price_fixed: 796000,
     image_url: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 6,
@@ -31,9 +31,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     purity: "18k (750/1000)",
     weight: 12.42,
     components_stones: "Émeraude de Colombie Ovale 0.85ct & Pavage Diamants",
-    price_type: "variable",
-    labor_cost: 650,
-    price_fixed: 0,
+    price_type: "fixe",
+    labor_cost: 0,
+    price_fixed: 2140400,
     image_url: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 3,
@@ -48,9 +48,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     purity: "18k (750/1000)",
     weight: 18.10,
     components_stones: "Sans pierres",
-    price_type: "variable",
-    labor_cost: 380,
-    price_fixed: 0,
+    price_type: "fixe",
+    labor_cost: 0,
+    price_fixed: 2552000,
     image_url: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 2,
@@ -67,7 +67,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     components_stones: "Perles de culture d'Eau Douce Blanches 8mm",
     price_type: "fixe",
     labor_cost: 0,
-    price_fixed: 149,
+    price_fixed: 149000,
     image_url: "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 12,
@@ -84,7 +84,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     components_stones: "Lunette Diamants Noirs Baguettes & Verre Saphir",
     price_type: "fixe",
     labor_cost: 0,
-    price_fixed: 12500,
+    price_fixed: 12500000,
     image_url: "https://images.unsplash.com/photo-1547996160-81dfa63595aa?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 1,
@@ -99,9 +99,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     purity: "18k (750/1000)",
     weight: 8.42,
     components_stones: "Diamants ronds brillants 1.10ct au total",
-    price_type: "variable",
-    labor_cost: 450,
-    price_fixed: 0,
+    price_type: "fixe",
+    labor_cost: 0,
+    price_fixed: 1460400,
     image_url: "https://images.unsplash.com/photo-1630012411394-47382300f3c5?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 4,
@@ -116,9 +116,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     purity: "950/1000",
     weight: 22.15,
     components_stones: "Saphir de Ceylan ovale 3.2ct & Pavage platine",
-    price_type: "variable",
-    labor_cost: 1100,
-    price_fixed: 0,
+    price_type: "fixe",
+    labor_cost: 0,
+    price_fixed: 3204250,
     image_url: "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 2,
@@ -133,9 +133,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     purity: "18k (750/1000)",
     weight: 5.60,
     components_stones: "Diamant de taille princesse 1.05ct certifié GIA D-VVS1",
-    price_type: "variable",
-    labor_cost: 500,
-    price_fixed: 0,
+    price_type: "fixe",
+    labor_cost: 0,
+    price_fixed: 1172000,
     image_url: "https://images.unsplash.com/photo-1603561591411-07134e71a2a9?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 5,
@@ -150,9 +150,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     purity: "18k (750/1000)",
     weight: 34.50,
     components_stones: "Zircons de pureté extra sur les fermoirs",
-    price_type: "variable",
-    labor_cost: 1200,
-    price_fixed: 0,
+    price_type: "fixe",
+    labor_cost: 0,
+    price_fixed: 5340000,
     image_url: "https://images.unsplash.com/photo-1573408301185-9146fe634ad0?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 3,
@@ -167,9 +167,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     purity: "18k (750/1000)",
     weight: 7.10,
     components_stones: "Ébène précieux de Madagascar inséré",
-    price_type: "variable",
-    labor_cost: 310,
-    price_fixed: 0,
+    price_type: "fixe",
+    labor_cost: 0,
+    price_fixed: 1162000,
     image_url: "https://images.unsplash.com/photo-1543294001-f7cbfe92237e?auto=format&fit=crop&q=80&w=800",
     visible_en_ligne: true,
     stock_qty: 8,
@@ -180,78 +180,53 @@ export const INITIAL_PRODUCTS: Product[] = [
 
 export const INITIAL_SETTINGS: SystemSettings = {
   whatsapp_phone: "33612345678", // standard placeholder number
-  gold_rate_18k: 65.50, // in € per gram
-  gold_rate_24k: 84.20, // pure gold
-  silver_rate_925: 1.15,
-  platinum_rate: 42.00,
+  gold_rate_18k: 120000, // in BIF per gram (example)
+  gold_rate_24k: 160000, // pure gold
+  silver_rate_925: 5000,
+  platinum_rate: 95000,
   tva_percentage: 18, 
   nif: "1000000000",
   company_phone: "+257 22 00 00 00",
   company_email: "contact@senefashion.bi",
+  company_address: "Avenue de France, Bujumbura, Burundi",
   apply_tva_on_sale: true
 };
 
 export const INITIAL_CLIENTS: Client[] = [
   {
     id: "CL-01",
+    firstName: "Alexandre",
+    lastName: "Laurent",
     name: "Alexandre Laurent",
     phone: "+33 6 88 77 66 55",
     email: "a.laurent@email.com",
-    ring_size: "54",
-    metal_preference: "Or Rose",
-    birthday: "1988-11-12",
-    notes_style: "Préfère les alliances épurées, style contemporain et bijoux en or rose massif."
+    idCardNumber: "123456789"
   },
   {
     id: "CL-02",
+    firstName: "Sophie",
+    lastName: "Bertrand",
     name: "Sophie Bertrand",
     phone: "+33 7 12 34 56 78",
     email: "sophie.bertrand@outlook.fr",
-    ring_size: "52",
-    metal_preference: "Or Blanc",
-    birthday: "1994-04-20",
-    notes_style: "Adore les pierres de couleur vibrantes, particulièrement les émeraudes et saphirs."
-  },
-  {
-    id: "CL-03",
-    name: "Marc Dumont",
-    phone: "+33 6 45 98 12 34",
-    email: "marc.dumont@corporate.com",
-    ring_size: "58",
-    metal_preference: "Platine",
-    birthday: "1975-08-03",
-    notes_style: "Collectionneur de montres de luxe et boutons de manchette de haute joaillerie."
-  },
-  {
-    id: "CL-04",
-    name: "Isabelle Adjani",
-    phone: "+33 6 11 22 33 44",
-    email: "isabelle@cinema.fr",
-    ring_size: "53",
-    metal_preference: "Or Blanc",
-    birthday: "1980-06-27",
-    notes_style: "Recherche de parures d'apparat pour tapis rouge et soirées de gala. Préfère les diamants blancs."
-  },
-  {
-    id: "CL-05",
-    name: "François Pinault",
-    phone: "+33 6 99 88 77 66",
-    email: "f.pinault@kering.com",
-    ring_size: "57",
-    metal_preference: "Platine",
-    birthday: "1966-10-14",
-    notes_style: "Commandes régulières de pièces d'art contemporain et montres squelettes d'exception en platine."
-  },
-  {
-    id: "CL-06",
-    name: "Amina Diop",
-    phone: "+221 77 569 82 41",
-    email: "amina.diop@sene-invest.sn",
-    ring_size: "54",
-    metal_preference: "Or Jaune",
-    birthday: "1989-02-28",
-    notes_style: "Inspirée par la haute couture textile ouest-africaine. Adore l'or jaune massif 18k à 24k très éclatant."
+    idCardNumber: "987654321"
   }
+];
+
+export const INITIAL_CATEGORIES: Category[] = [
+  { id: '1', name: 'Bagues' },
+  { id: '2', name: 'Colliers' },
+  { id: '3', name: 'Bracelets' },
+  { id: '4', name: 'Boucles d\'oreilles' },
+  { id: '5', name: 'Montres' }
+];
+
+export const INITIAL_METAL_ALLIANCES: MetalAlliance[] = [
+  { id: '1', name: 'Or Jaune' },
+  { id: '2', name: 'Or Blanc' },
+  { id: '3', name: 'Or Rose' },
+  { id: '4', name: 'Argent' },
+  { id: '5', name: 'Platine' }
 ];
 
 export const INITIAL_EXPENSES: Expense[] = [
@@ -550,7 +525,7 @@ export const INITIAL_LOGS: AuditLog[] = [
     timestamp: "2026-06-06T08:30:00Z",
     user_name: "Gérant Principal",
     action: "Mise à jour Cours Métaux",
-    details: "Mise à jour du cours de l'Or 18k à 65.50 €/g."
+    details: "Mise à jour du cours de l'Or 18k à 120000 BIF/g."
   },
   {
     id: "L-03",
@@ -563,25 +538,27 @@ export const INITIAL_LOGS: AuditLog[] = [
 
 // Helper to calculate cost in real-time
 export function calculateProductPrice(product: Product, settings: SystemSettings): number {
-  if (product.price_type === 'fixe') {
+  if (product.price_fixed && product.price_fixed > 0) {
     return product.price_fixed;
   }
-  let rate = 0;
-  switch (product.metal_type) {
-    case 'Or Jaune':
-    case 'Or Blanc':
-    case 'Or Rose':
-      rate = settings.gold_rate_18k;
-      break;
-    case 'Argent':
-      rate = settings.silver_rate_925;
-      break;
-    case 'Platine':
-      rate = settings.platinum_rate;
-      break;
+  let rate = 120000;
+  if (settings) {
+    switch (product.metal_type) {
+      case 'Or Jaune':
+      case 'Or Blanc':
+      case 'Or Rose':
+        rate = settings.gold_rate_18k || 120000;
+        break;
+      case 'Argent':
+        rate = settings.silver_rate_925 || 5000;
+        break;
+      case 'Platine':
+        rate = settings.platinum_rate || 95000;
+        break;
+    }
   }
-  // Formula: weight * rate + labor_cost
-  const sum = (product.weight * rate) + product.labor_cost;
+  const labor = product.labor_cost < 20000 ? product.labor_cost * 1000 : (product.labor_cost || 0);
+  const sum = (product.weight * rate) + labor;
   return Math.round(sum * 100) / 100;
 }
 

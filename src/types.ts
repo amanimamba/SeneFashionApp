@@ -25,15 +25,30 @@ export interface Product {
   created_at: string;
 }
 
+export type StockMovementType =
+  | 'entree'
+  | 'sortie'
+  | 'entree_fournisseur'
+  | 'entree_fabrication'
+  | 'retour_confiance'
+  | 'sortie_confiance'
+  | 'sortie_vente'
+  | 'sortie_fonte_recyclage'
+  | 'sortie_perte_vol'
+  | 'entrée';
+
 export interface StockMovement {
   id: string;
   sku: string;
-  type: 'entree_fournisseur' | 'entree_fabrication' | 'sortie_vente' | 'sortie_fonte_recyclage' | 'sortie_perte_vol' | 'sortie_confiance' | 'retour_confiance';
+  type: StockMovementType;
+  reason?: string; // e.g. "Achat", "Fabrication", "Vente", "Perte"
   qty: number;
   date: string;
-  partner_name: string; // Fournisseur name or customer name for trust loan
-  cost_value: number; // cost of fabrication or buying value
+  purchase_price?: number;
+  selling_price?: number;
+  partner_name: string;
   notes: string;
+  cost_value?: number;
 }
 
 export interface SaleItem {
@@ -70,13 +85,25 @@ export interface Expense {
 
 export interface Client {
   id: string;
-  name: string;
-  phone: string;
+  firstName: string;
+  lastName: string;
   email: string;
+  phone: string;
+  idCardNumber: string;
+  name?: string;
   ring_size?: string;
-  metal_preference?: string;
-  birthday?: string;
   notes_style?: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+}
+
+export interface MetalAlliance {
+  id: string;
+  name: string;
+  rate_bif_per_g?: number;
 }
 
 export interface AuditLog {
@@ -99,5 +126,6 @@ export interface SystemSettings {
   nif: string;           // Tax ID
   company_phone: string;
   company_email: string;
+  company_address: string;
   apply_tva_on_sale: boolean;
 }

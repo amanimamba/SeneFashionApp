@@ -56,7 +56,7 @@ export default function ProductDetails({ products, settings }: ProductDetailsPro
 
   // Let's generate the pre-filled custom WhatsApp message URL
   // "Bonjour, je suis intéressé(e) par le produit suivant : [Nom du Bijou] (Réf: [Code SKU/ID]). Est-il toujours disponible en magasin ?"
-  const messageText = `Bonjour, je suis très intéressé(e) par votre bijou d'artisanat : ${product.designation} (Réf: ${product.sku}). Poids approximatif : ${product.weight.toFixed(2)}g en ${product.metal_type} (${product.purity}). Est-il disponible actuellement pour un essayage, ou devrais-je le commander sur mesure ? L'image du modèle concerné : ${product.image_url}`;
+  const messageText = `Bonjour, je suis très intéressé(e) par votre bijou : ${product.designation} (Réf: ${product.sku}). Poids approximatif : ${product.weight.toFixed(2)}g en ${product.metal_type}. Est-il disponible actuellement pour un essayage, ou devrais-je le commander sur mesure ? L'image du modèle concerné : ${product.image_url}`;
   
   const encodedMessage = encodeURIComponent(messageText);
   const whatsappUrl = `https://wa.me/${settings.whatsapp_phone}?text=${encodedMessage}`;
@@ -151,8 +151,8 @@ export default function ProductDetails({ products, settings }: ProductDetailsPro
                   <div className="flex items-center space-x-3 p-3 bg-[#FAF9F5] border border-stone-100 rounded-lg">
                     <Sparkles className="h-4 w-4 text-[#AA7C11] flex-shrink-0" />
                     <div>
-                      <span className="block text-[8px] uppercase tracking-widest text-stone-400">Métal & Titrage</span>
-                      <span className="text-xs font-bold text-stone-800 truncate line-clamp-1">{product.metal_type} {product.purity}</span>
+                      <span className="block text-[8px] uppercase tracking-widest text-stone-400">Alliage Métal</span>
+                      <span className="text-xs font-bold text-stone-800 truncate line-clamp-1">{product.metal_type}</span>
                     </div>
                   </div>
 
@@ -239,7 +239,7 @@ export default function ProductDetails({ products, settings }: ProductDetailsPro
                     <div className="p-4 flex-1 flex flex-col justify-between">
                       <div>
                         <span className="text-[9px] uppercase tracking-widest text-[#AA7C11] font-bold block mb-1">
-                          {s.metal_type} • {s.purity}
+                          {s.metal_type}
                         </span>
                         <h4 className="font-serif text-sm font-semibold text-stone-800 line-clamp-1 truncate group-hover:text-[#AA7C11]">
                           {s.designation}

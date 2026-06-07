@@ -273,8 +273,6 @@ export default function Vitrine({ products, settings }: VitrineProps) {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center space-x-1.5 text-[10px] uppercase tracking-widest text-[#AA7C11] font-extrabold font-mono">
                         <span>{product.metal_type}</span>
-                        <span>•</span>
-                        <span>{product.purity}</span>
                       </div>
                       
                       {/* Gold rating stars */}
@@ -333,11 +331,11 @@ export default function Vitrine({ products, settings }: VitrineProps) {
                     <div className="flex items-center justify-between pt-3 border-t border-stone-100">
                       <div>
                         <span className="block text-[8px] text-stone-400 uppercase tracking-widest font-bold">
-                          Prix FOB Vendôme ({product.price_type})
+                          Prix de Vente
                         </span>
                         <div className="flex items-baseline space-x-1">
                           <span className="font-serif text-lg font-black text-stone-900">
-                            {finalPrice.toLocaleString('fr-FR')} €
+                            {finalPrice.toLocaleString('fr-FR')} BIF
                           </span>
                           <span className="text-[10px] text-stone-400 font-sans font-normal">/ pce</span>
                         </div>

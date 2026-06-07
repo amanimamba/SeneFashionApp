@@ -8,14 +8,15 @@ import { useNavigate } from 'react-router-dom';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import { 
-  Product, StockMovement, Sale, Expense, Client, AuditLog, SystemSettings, CategoryType, MetalType 
+  Product, StockMovement, Sale, Expense, Client, AuditLog, SystemSettings, CategoryType, MetalType, Category, MetalAlliance 
 } from '../types';
-import { calculateProductPrice, calculateTVA } from '../data';
+import { calculateProductPrice, calculateTVA, INITIAL_CATEGORIES, INITIAL_METAL_ALLIANCES, INITIAL_CLIENTS } from '../data';
 import { 
   TrendingUp, Library, ShoppingCart, RefreshCw, BadgeEuro, Users, 
   Settings, UserPlus, Trash, Plus, Check, AlertTriangle, Printer, FileText, 
   Sparkles, History, HardDrive, Inbox, Package, Scale, Eye, Tag, Menu, X, Gem, Barcode,
-  ArrowUpRight, ArrowDownLeft, Database, ShoppingBag
+  ArrowUpRight, ArrowDownLeft, Database, ShoppingBag,
+  Download, Layers, TrendingDown, CircleDollarSign, Wallet2, CreditCard, PlusCircle, MinusCircle
 } from 'lucide-react';
 import BarcodeSVG from './BarcodeSVG';
 
@@ -87,19 +88,65 @@ interface AdminDashboardProps {
   addLog: (action: string, details: string, target_sku?: string) => void;
 }
 
-type AdminTab = 'analytics' | 'catalog' | 'pos' | 'movements' | 'crm' | 'expenses' | 'inventory_audit' | 'settings';
+type AdminTab = 'analytics' | 'catalog' | 'pos' | 'movements' | 'crm' | 'expenses' | 'inventory_audit' | 'settings' | 'stock_entry' | 'stock_exit' | 'management';
 
 export default function AdminDashboard({
   products, movements, sales, expenses, clients, logs, settings,
   setProducts, setMovements, setSales, setExpenses, setClients, setLogs, setSettings, addLog
 }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>('analytics');
+  const exportToExcel = (data: any[], filename: string) => {
+    if (!data || data.length === 0) return;
+    const headers = Object.keys(data[0]).join(';');
+    const rows = data.map(obj => Object.values(obj).map(val => `"${val}"`).join(';')).join('\n');
+    const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + rows;
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${filename}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
+  const [metals, setMetals] = useState<MetalAlliance[]>(INITIAL_METAL_ALLIANCES);
+  
+  const handleAddCategory = (name: string) => {
+    if (!name) return;
+    const newCat: Category = { id: `CAT-${Date.now()}`, name };
+    setCategories([...categories, newCat]);
+    addLog('Gestion', `Nouvelle catégorie créée : "${name}"`);
+  };
+
+  const handleUpdateMetalRate = (id: string, newRate: number) => {
+    setMetals(metals.map(m => m.id === id ? { ...m, rate_bif_per_g: newRate } : m));
+    const m = metals.find(m => m.id === id);
+    addLog('Gestion', `Mise à jour cours pour "${m?.name}" : ${newRate} BIF/g`);
+  };
+
+  const handleAddMetal = (name: string, rate: number) => {
+    if (!name) return;
+    const newMetal: MetalAlliance = { id: `MET-${Date.now()}`, name, rate_bif_per_g: rate };
+    setMetals([...metals, newMetal]);
+    addLog('Gestion', `Nouvelle alliance créée : "${name}" à ${rate} BIF/g`);
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    setCategories(categories.filter(c => c.id !== id));
+  };
+
+  const handleDeleteMetal = (id: string) => {
+    setMetals(metals.filter(m => m.id !== id));
+  };
+
   const navigate = useNavigate();
 
   // --- RESPONSIVE SIDEBAR & HIGHCHARTS REGISTRATION ---
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [chartYear, setChartYear] = useState<number>(2026);
   const [chartMonth, setChartMonth] = useState<number | 'all'>('all');
+  const [dateStart, setDateStart] = useState<string>('');
+  const [dateEnd, setDateEnd] = useState<string>('');
 
   // --- HIGHCHARTS DATA AGGREGATION ---
   const chartData = useMemo(() => {
@@ -360,9 +407,11 @@ export default function AdminDashboard({
   // Stock movement adding
   const [qtyToChange, setQtyToChange] = useState<number>(1);
   const [targetProductSku, setTargetProductSku] = useState<string>('');
-  const [movementType, setMovementType] = useState<StockMovement['type']>('entree_fournisseur');
-  const [movementPartner, setMovementPartner] = useState<string>('Fournisseur de Métaux SAS');
-  const [movementCost, setMovementCost] = useState<number>(0);
+  const [movementType, setMovementType] = useState<'entree' | 'sortie'>('entree');
+  const [movementPartner, setMovementPartner] = useState<string>('');
+  const [movementPurchasePrice, setMovementPurchasePrice] = useState<number>(0);
+  const [movementSellingPrice, setMovementSellingPrice] = useState<number>(0);
+  const [movementReason, setMovementReason] = useState<string>('Achat');
   const [movementNotes, setMovementNotes] = useState<string>('');
 
   // Fabrication state (Casting/Fonte raw gold logic)
@@ -391,13 +440,11 @@ export default function AdminDashboard({
 
   // CRM client adding
   const [newClient, setNewClient] = useState<Partial<Client>>({
-    name: '',
+    firstName: '',
+    lastName: '',
     phone: '',
     email: '',
-    ring_size: '54',
-    metal_preference: 'Or Jaune',
-    birthday: '',
-    notes_style: ''
+    idCardNumber: ''
   });
 
   // Settings modification
@@ -433,11 +480,13 @@ export default function AdminDashboard({
     const newMv: StockMovement = {
       id: mvid,
       sku: entrySku,
-      type: entryType,
+      type: 'entree',
+      reason: entryType === 'entree_fournisseur' ? 'Achat' : 'Fabrication',
       qty: entryQty,
       date: new Date().toISOString(),
       partner_name: entryPartner || (entryType === 'entree_fournisseur' ? 'Fournisseur Externe' : 'Atelier Interne'),
-      cost_value: entryCost,
+      purchase_price: entryCost,
+      selling_price: 0,
       notes: entryNotes || 'Entrée insérée via formulaire simplifié.'
     };
 
@@ -477,11 +526,13 @@ export default function AdminDashboard({
     const newMv: StockMovement = {
       id: mvid,
       sku: exitSku,
-      type: exitType,
+      type: 'sortie',
+      reason: exitType === 'sortie_vente' ? 'Vente' : exitType === 'sortie_perte_vol' ? 'Perte/Vol' : 'Autre',
       qty: exitQty,
       date: new Date().toISOString(),
-      partner_name: exitPartner || 'Non spécifié',
-      cost_value: 0,
+      partner_name: exitPartner || 'Destinataire inconnu',
+      purchase_price: 0,
+      selling_price: exitType === 'sortie_vente' ? calculateProductPrice(prod, settings) : 0,
       notes: exitNotes || 'Sortie insérée via formulaire simplifié.'
     };
 
@@ -654,110 +705,83 @@ export default function AdminDashboard({
 
   // --- ANALYTICS CALCULATIONS ---
   const stats = useMemo(() => {
+    const isWithinDateRange = (dateStr: string) => {
+      const date = new Date(dateStr);
+      if (dateStart && new Date(dateStart) > date) return false;
+      if (dateEnd && new Date(dateEnd) < date) return false;
+      return true;
+    };
+
     // Sales computation
-    let totalSalesVal = 0;
     let totalRevenue = 0;
+    let totalSoldItemsCount = 0;
     sales.forEach(s => {
+      if (!isWithinDateRange(s.date)) return;
       totalRevenue += s.total_paid;
-      // Calculate true sales value
-      totalSalesVal += s.total_raw - s.discount_total;
+      totalSoldItemsCount += s.items.reduce((acc, item) => acc + item.qty, 0);
     });
 
     // Expenses computation
-    let totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    let totalExpenses = expenses.filter(e => isWithinDateRange(e.date)).reduce((sum, exp) => sum + exp.amount, 0);
 
-    // Cost of Goods Sold estimation from finished products
-    // We compute simulated raw cost value of sold metals + labor based on movement trails
-    let estimatedCOGS = 0;
-    sales.forEach(sale => {
-      sale.items.forEach(item => {
-        const prod = products.find(p => p.sku === item.sku);
-        if (prod) {
-          // Calculate buying profile or simple cost as 60% of calculated retail
-          const prodPrice = calculateProductPrice(prod, settings);
-          estimatedCOGS += (prodPrice * 0.55) * item.qty;
-        }
-      });
-    });
-
-    const netProfit = totalRevenue - (estimatedCOGS + totalExpenses);
-
-    // Total display case inventory assets calculation
-    let totalStockValueInWindow = 0;
-    let totalStockValueInSafe = 0;
-
-    products.forEach(p => {
-      const priceVal = calculateProductPrice(p, settings);
-      const inventoryAssetPrice = priceVal * p.stock_qty;
-      // High end jewels of value >= 1000 are allocated to safety vault, others stay in front panel display windows
-      if (priceVal >= 1000) {
-        totalStockValueInSafe += inventoryAssetPrice;
-      } else {
-        totalStockValueInWindow += inventoryAssetPrice;
-      }
-    });
-
-    // Ranking bestseller items
-    const skuSaleCounts: Record<string, number> = {};
-    sales.forEach(s => {
-      s.items.forEach(i => {
-        skuSaleCounts[i.sku] = (skuSaleCounts[i.sku] || 0) + i.qty;
-      });
-    });
-
-    const topProducts = Object.entries(skuSaleCounts)
-      .map(([sku, qty]) => {
-        const prod = products.find(p => p.sku === sku);
-        return {
-          sku,
-          qty,
-          designation: prod ? prod.designation : sku,
-          metal: prod ? prod.metal_type : 'Inconnu'
-        };
-      })
-      .sort((a,b) => b.qty - a.qty)
-      .slice(0, 3);
-
-    // Real cumulative stock metrics
+    // Stock metrics
     let totalEntered = 0;
     let totalExited = 0;
-    let totalSold = 0;
     let totalStockCost = 0;
+    let totalSellingPriceOfSold = 0;
 
     movements.forEach(mv => {
-      if (mv.type === 'entree_fournisseur' || mv.type === 'entree_fabrication') {
+      if (!isWithinDateRange(mv.date)) return;
+      if (mv.type === 'entree') {
         totalEntered += mv.qty;
-        totalStockCost += (mv.cost_value * mv.qty);
-      } else if (mv.type === 'sortie_vente') {
-        totalSold += mv.qty;
-      } else if (['sortie_fonte_recyclage', 'sortie_perte_vol', 'sortie_confiance'].includes(mv.type)) {
+        totalStockCost += (mv.purchase_price || 0) * mv.qty;
+      } else if (mv.type === 'sortie') {
         totalExited += mv.qty;
-      } else if (mv.type === 'retour_confiance') {
-        totalExited = Math.max(0, totalExited - mv.qty);
+        if (mv.reason === 'Vente') {
+          totalSellingPriceOfSold += (mv.selling_price || 0) * mv.qty;
+        }
       }
     });
 
     const totalRemaining = products.reduce((sum, p) => sum + p.stock_qty, 0);
-    // Bilan de l'activité (Gain ou Perte)
     const globalNetBalance = totalRevenue - (totalStockCost + totalExpenses);
+
+    // Compute top products based on sales
+    const productSalesMap: { [sku: string]: { sku: string; designation: string; metal: string; qty: number } } = {};
+    sales.forEach(s => {
+      if (!isWithinDateRange(s.date)) return;
+      s.items.forEach(item => {
+        if (!productSalesMap[item.sku]) {
+          const associatedProd = products.find(p => p.sku === item.sku);
+          productSalesMap[item.sku] = {
+            sku: item.sku,
+            designation: item.designation,
+            metal: associatedProd?.metal_type || 'Or',
+            qty: 0
+          };
+        }
+        productSalesMap[item.sku].qty += item.qty;
+      });
+    });
+
+    const topProducts = Object.values(productSalesMap)
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 3);
 
     return {
       revenue: totalRevenue,
       expenses: totalExpenses,
-      cogs: estimatedCOGS,
-      netProfit,
-      displayCaseVal: totalStockValueInWindow,
-      safeVal: totalStockValueInSafe,
-      totalVal: totalStockValueInWindow + totalStockValueInSafe,
-      topProducts,
+      globalNetBalance,
       totalEntered,
       totalExited,
-      totalSold,
+      totalSold: totalSoldItemsCount,
       totalRemaining,
       totalStockCost,
-      globalNetBalance
+      totalSellingPriceOfSold,
+      numProducts: products.length,
+      topProducts
     };
-  }, [sales, expenses, products, settings, movements]);
+  }, [sales, expenses, movements, products, dateStart, dateEnd]);
 
   // Alert system for low stocks
   const lowStockThreshold = 2;
@@ -825,11 +849,11 @@ export default function AdminDashboard({
         designation: newProduct.designation,
         category: (newProduct.category || 'Bagues') as CategoryType,
         metal_type: (newProduct.metal_type || 'Or Jaune') as MetalType,
-        purity: newProduct.purity || "18k (750/1000)",
+        purity: "18k (750/1000)",
         weight: Number(newProduct.weight || 0),
         components_stones: newProduct.components_stones || 'Sans pierres',
-        price_type: (newProduct.price_type || 'variable') as 'fixe' | 'variable',
-        labor_cost: Number(newProduct.labor_cost || 0),
+        price_type: 'fixe',
+        labor_cost: 0,
         price_fixed: Number(newProduct.price_fixed || 0),
         image_url: newProduct.image_url || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&q=80&w=800',
         visible_en_ligne: !!newProduct.visible_en_ligne,
@@ -849,11 +873,11 @@ export default function AdminDashboard({
             designation: newProduct.designation || p.designation,
             category: (newProduct.category as CategoryType) || p.category,
             metal_type: (newProduct.metal_type as MetalType) || p.metal_type,
-            purity: newProduct.purity || p.purity,
+            purity: p.purity || "18k (750/1000)",
             weight: Number(newProduct.weight !== undefined ? newProduct.weight : p.weight),
             components_stones: newProduct.components_stones || p.components_stones,
-            price_type: (newProduct.price_type as 'fixe' | 'variable') || p.price_type,
-            labor_cost: Number(newProduct.labor_cost !== undefined ? newProduct.labor_cost : p.labor_cost),
+            price_type: 'fixe' as 'fixe' | 'variable',
+            labor_cost: 0,
             price_fixed: Number(newProduct.price_fixed !== undefined ? newProduct.price_fixed : p.price_fixed),
             image_url: newProduct.image_url || p.image_url,
             visible_en_ligne: newProduct.visible_en_ligne !== undefined ? !!newProduct.visible_en_ligne : p.visible_en_ligne,
@@ -909,7 +933,7 @@ export default function AdminDashboard({
       qty: qtyToChange,
       date: new Date().toISOString(),
       partner_name: movementPartner || 'Non spécifié',
-      cost_value: Number(movementCost || 0),
+      cost_value: Number(movementPurchasePrice || 0),
       notes: movementNotes || 'Mouvement saisi manuellement par la direction.'
     };
 
@@ -1238,8 +1262,8 @@ export default function AdminDashboard({
   // Add / Update CRM Client
   const handleSaveClient = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClient.name || !newClient.phone) {
-      alert('Veuillez au moins spécifier un nom et numéro.');
+    if (!newClient.firstName || !newClient.lastName || !newClient.phone) {
+      alert('Veuillez au moins spécifier un prénom, un nom et un numéro.');
       return;
     }
 
@@ -1248,37 +1272,35 @@ export default function AdminDashboard({
       const id = `CL-${(clients.length + 1).toString().padStart(2, '0')}`;
       const added: Client = {
         id,
-        name: newClient.name,
+        firstName: newClient.firstName,
+        lastName: newClient.lastName,
+        name: `${newClient.firstName} ${newClient.lastName}`,
         phone: newClient.phone,
         email: newClient.email || '',
-        ring_size: newClient.ring_size || '',
-        metal_preference: newClient.metal_preference || 'Or Jaune',
-        birthday: newClient.birthday || '',
-        notes_style: newClient.notes_style || ''
+        idCardNumber: newClient.idCardNumber || ''
       };
 
       setClients([...clients, added]);
-      addLog('Nouveau Client CRM', `Fiche créée pour "${added.name}".`);
+      addLog('Nouveau Client CRM', `Fiche créée pour "${added.firstName} ${added.lastName}".`);
     } else {
       // Update mode
       const updated = clients.map(c => {
         if (c.id === clientEditingId) {
           return {
             ...c,
-            name: newClient.name || c.name,
+            firstName: newClient.firstName || c.firstName,
+            lastName: newClient.lastName || c.lastName,
+            name: `${newClient.firstName || c.firstName} ${newClient.lastName || c.lastName}`,
             phone: newClient.phone || c.phone,
             email: newClient.email || c.email,
-            ring_size: newClient.ring_size || c.ring_size,
-            metal_preference: newClient.metal_preference || c.metal_preference,
-            birthday: newClient.birthday || c.birthday,
-            notes_style: newClient.notes_style || c.notes_style,
+            idCardNumber: newClient.idCardNumber || c.idCardNumber,
           };
         }
         return c;
       });
 
       setClients(updated);
-      addLog('Modif Client CRM', `Fiche client "${newClient.name}" mise à jour.`);
+      addLog('Modif Client CRM', `Fiche client "${newClient.firstName} ${newClient.lastName}" mise à jour.`);
     }
 
     setClientModalOpen(false);
@@ -1346,6 +1368,30 @@ export default function AdminDashboard({
             </button>
 
             <button
+              onClick={() => { setActiveTab('stock_entry'); setSidebarOpen(false); }}
+              className={`w-full text-left px-4 py-3 text-xs tracking-wider uppercase font-semibold rounded-lg flex items-center space-x-3 transition-colors ${
+                activeTab === 'stock_entry'
+                  ? 'bg-[#AA7C11]/15 text-[#D4AF37] border-l-4 border-[#AA7C11]'
+                  : 'hover:bg-stone-800 text-stone-400 hover:text-stone-100'
+              }`}
+            >
+              <TrendingUp className="h-4 w-4" />
+              <span>Entrée en Stock</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('stock_exit'); setSidebarOpen(false); }}
+              className={`w-full text-left px-4 py-3 text-xs tracking-wider uppercase font-semibold rounded-lg flex items-center space-x-3 transition-colors ${
+                activeTab === 'stock_exit'
+                  ? 'bg-[#AA7C11]/15 text-[#D4AF37] border-l-4 border-[#AA7C11]'
+                  : 'hover:bg-stone-800 text-stone-400 hover:text-stone-100'
+              }`}
+            >
+              <TrendingUp className="h-4 w-4 rotate-180" />
+              <span>Sortie de Stock</span>
+            </button>
+
+            <button
               onClick={() => { setActiveTab('catalog'); setSidebarOpen(false); }}
               className={`w-full text-left px-4 py-3 text-xs tracking-wider uppercase font-semibold rounded-lg flex items-center space-x-3 transition-colors ${
                 activeTab === 'catalog'
@@ -1379,6 +1425,18 @@ export default function AdminDashboard({
             >
               <RefreshCw className="h-4 w-4" />
               <span>Flux Stocks & Fonte</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('management'); setSidebarOpen(false); }}
+              className={`w-full text-left px-4 py-3 text-xs tracking-wider uppercase font-semibold rounded-lg flex items-center space-x-3 transition-colors ${
+                activeTab === 'management'
+                  ? 'bg-[#AA7C11]/15 text-[#D4AF37] border-l-4 border-[#AA7C11]'
+                  : 'hover:bg-stone-800 text-stone-400 hover:text-stone-100'
+              }`}
+            >
+              <Package className="h-4 w-4" />
+              <span>Catégories & Alliages</span>
             </button>
 
             <button
@@ -1588,289 +1646,209 @@ export default function AdminDashboard({
 
         {/* --- TAB 1: REPORTING & ANALYTICS --- */}
         {activeTab === 'analytics' && (
-          <div className="space-y-8 animate-fade-in">
-
-            {/* BILAN DE L'ACTIVITÉ & SUIVI DE L'AVANCE */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              
-              {/* Card Bilan Financier (Gain ou Perte) */}
-              <div className="lg:col-span-6 bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm relative overflow-hidden">
-                <span className="absolute top-2 right-2 flex space-x-1 py-1">
-                  <span className="px-2 py-0.5 bg-amber-50 text-[#AA7C11] font-mono text-[8px] uppercase tracking-widest font-bold border border-amber-200 rounded">
-                    Bilan Officiel
-                  </span>
-                </span>
-                
-                <h3 className="font-serif text-base text-stone-850 font-semibold mb-4 flex items-center space-x-2">
-                  <TrendingUp className="h-5 w-5 text-[#AA7C11]" />
-                  <span>Bilan d'Activité (Gain ou Perte)</span>
-                </h3>
-
-                <p className="text-xs text-stone-500 font-light mb-6 leading-relaxed">
-                  Ce bilan détermine si votre activité de joaillerie dégage un gain (bénéfice) ou une perte par rapport au coût réel de fabrication/d'achat du stock brut injecté et de vos dépenses courantes.
-                </p>
-
-                <div className="p-4 rounded-xl border flex flex-col items-center justify-center text-center space-y-2 mb-6 bg-[#FAF9F5] border-stone-200">
-                  <span className="text-[10px] uppercase tracking-wider text-stone-400 font-bold">État Global de l'Activité</span>
-                  {stats.globalNetBalance >= 0 ? (
-                    <div className="space-y-1">
-                      <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full text-[11px] font-sans font-bold uppercase tracking-wider">
-                        ▲ En Excédent (GAIN)
-                      </span>
-                      <h4 className="font-serif text-3xl font-black text-emerald-600">
-                        +{stats.globalNetBalance.toLocaleString('fr-FR')} €
-                      </h4>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <span className="inline-block px-3 py-1 bg-rose-100 text-rose-800 border border-rose-200 rounded-full text-[11px] font-sans font-bold uppercase tracking-wider">
-                        ▼ En Déficit (PERTE)
-                      </span>
-                      <h4 className="font-serif text-3xl font-black text-rose-600">
-                        {stats.globalNetBalance.toLocaleString('fr-FR')} €
-                      </h4>
-                    </div>
-                  )}
-                </div>
-
-                {/* Accounting breakdown ledger */}
-                <div className="space-y-3 font-sans text-xs text-[#2C251E]">
-                  <div className="flex justify-between items-center py-2 border-b border-dashed border-stone-100">
-                    <span className="font-medium">Chiffre d'Affaires Encaissé (Ventes)</span>
-                    <span className="font-mono text-emerald-600 font-bold">+{stats.revenue.toLocaleString('fr-FR')} €</span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center py-2 border-b border-dashed border-stone-100" title="Coût réel total de tous les produits enregistrés par fournisseurs ou atelier de fonte">
-                    <span>Achat Métaux & Coût Fabrication Stock (-)</span>
-                    <span className="font-mono text-rose-600 font-medium">-{stats.totalStockCost.toLocaleString('fr-FR')} €</span>
-                  </div>
-
-                  <div className="flex justify-between items-center py-2 border-b border-dashed border-stone-100">
-                    <span>Charges de fonctionnement (Dépenses Générales) (-)</span>
-                    <span className="font-mono text-rose-600 font-medium">-{stats.expenses.toLocaleString('fr-FR')} €</span>
-                  </div>
-
-                  <div className="flex justify-between items-center py-2.5 font-bold pt-4 text-stone-900 border-t border-stone-200">
-                    <span className="uppercase">Solde Comptable Net</span>
-                    <span className={`font-mono text-sm ${stats.globalNetBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {stats.globalNetBalance.toLocaleString('fr-FR')} €
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-              
-              {/* Card Suivi de l'Avancée Physique du Stock */}
-              <div className="lg:col-span-6 bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm">
-                <h3 className="font-serif text-base text-stone-850 font-semibold mb-4 flex items-center space-x-2">
-                  <Database className="h-5 w-5 text-[#AA7C11]" />
-                  <span>Avancement & Suivi Physique (Quantités)</span>
-                </h3>
-
-                <p className="text-xs text-stone-500 font-light mb-6 leading-relaxed">
-                  Indicateurs cumulatifs de flux physiques pour piloter précisément vos pièces d'orfèvrerie : de leur création en atelier à leur vente finale Place Vendôme.
-                </p>
-
-                <div className="grid grid-cols-2 gap-4">
-                  
-                  <div className="p-4 bg-[#FAF9F5] border border-stone-100 rounded-xl relative overflow-hidden group">
-                    <span className="absolute -bottom-2 -right-2 text-stone-100 group-hover:scale-110 transition-transform duration-300">
-                      <ArrowUpRight className="h-16 w-16 text-emerald-500/10" />
-                    </span>
-                    <span className="block text-[8px] uppercase tracking-widest text-[#AA7C11] font-bold">📥 Pcs Entrées</span>
-                    <div className="flex items-baseline space-x-1.5 mt-2">
-                      <span className="font-serif text-3xl font-bold text-stone-800">{stats.totalEntered}</span>
-                      <span className="text-[10px] text-stone-400">unités</span>
-                    </div>
-                    <span className="text-[9px] text-stone-400 block mt-2 font-light">
-                      Fournisseurs & Fabrication
-                    </span>
-                  </div>
-
-                  <div className="p-4 bg-[#FAF9F5] border border-stone-100 rounded-xl relative overflow-hidden group">
-                    <span className="absolute -bottom-2 -right-2 text-stone-100 group-hover:scale-110 transition-transform duration-300">
-                      <ArrowDownLeft className="h-16 w-16 text-rose-500/10" />
-                    </span>
-                    <span className="block text-[8px] uppercase tracking-widest text-[#2C251E] font-bold">📤 Pcs Sorties</span>
-                    <div className="flex items-baseline space-x-1.5 mt-2">
-                      <span className="font-serif text-3xl font-bold text-stone-800">{stats.totalExited}</span>
-                      <span className="text-[10px] text-stone-400">unités</span>
-                    </div>
-                    <span className="text-[9px] text-stone-400 block mt-2 font-light">
-                      Pertes, Fonts & Prêts
-                    </span>
-                  </div>
-
-                  <div className="p-4 bg-[#FAF9F5] border border-stone-100 rounded-xl relative overflow-hidden group">
-                    <span className="absolute -bottom-2 -right-2 text-stone-100 group-hover:scale-110 transition-transform duration-300">
-                      <ShoppingBag className="h-16 w-16 text-emerald-500/10" />
-                    </span>
-                    <span className="block text-[8px] uppercase tracking-widest text-emerald-600 font-bold">💰 Pcs Vendues</span>
-                    <div className="flex items-baseline space-x-1.5 mt-2">
-                      <span className="font-serif text-3xl font-bold text-stone-800">{stats.totalSold}</span>
-                      <span className="text-[10px] text-stone-400">unités</span>
-                    </div>
-                    <span className="text-[9px] text-stone-400 block mt-2 font-light">
-                      Commandes POS réglées
-                    </span>
-                  </div>
-
-                  <div className="p-4 bg-stone-900 text-[#FAF9F5] rounded-xl relative overflow-hidden group border border-[#2C251E]">
-                    <span className="absolute -bottom-2 -right-2 text-stone-800 group-hover:scale-110 transition-transform duration-300">
-                      <Sparkles className="h-16 w-16 text-white/5" />
-                    </span>
-                    <span className="block text-[8px] uppercase tracking-widest text-[#D4AF37] font-bold">📦 Stock Restant</span>
-                    <div className="flex items-baseline space-x-1.5 mt-2">
-                      <span className="font-serif text-3xl font-bold text-[#D4AF37]">{stats.totalRemaining}</span>
-                      <span className="text-[10px] text-stone-400">unités</span>
-                    </div>
-                    <span className="text-[9px] text-stone-300 block mt-2 font-light">
-                      En vitrine et coffre-fort
-                    </span>
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
+          <div className="space-y-8 animate-fade-in font-sans">
             
-            {/* Real-time key counters */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              
-              <div className="bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm flex flex-col justify-between">
-                <div>
-                  <span className="text-[10px] uppercase tracking-widest text-[#AA7C11] font-bold">Encaissements Totaux</span>
-                  <h3 className="font-serif text-3xl font-medium text-stone-800 mt-1">
-                    {stats.revenue.toLocaleString('fr-FR')} €
-                  </h3>
-                </div>
-                <p className="text-[10px] text-emerald-500 font-medium mt-4">
-                  Chiffre d'affaires perçu en temps réel
-                </p>
+            {/* Header / Exports */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <h2 className="font-serif text-2xl font-bold text-stone-900">Tableau de Bord & Analytics</h2>
+                <p className="text-xs text-stone-500 font-light mt-1">Suivi financier et inventaire en Frans Burundais (BIF).</p>
               </div>
-
-              <div className="bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm flex flex-col justify-between">
-                <div>
-                  <span className="text-[10px] uppercase tracking-widest text-stone-400 font-bold">Dépenses Générales</span>
-                  <h3 className="font-serif text-3xl font-medium text-stone-800 mt-1">
-                    -{stats.expenses.toLocaleString('fr-FR')} €
-                  </h3>
-                </div>
-                <div className="w-full bg-stone-100 h-1.5 rounded-full mt-4 overflow-hidden">
-                  <div className="bg-amber-500 h-full" style={{ width: `${Math.min(100, (stats.expenses / (stats.revenue || 1))*100)}%` }}></div>
-                </div>
+              <div className="flex space-x-2">
+                <button 
+                  onClick={() => {
+                    const data = sales.map(s => ({
+                      "ID Facture": s.id,
+                      "Date": s.date,
+                      "Client": s.client_name || "Client Anonyme",
+                      "Total Brut (BIF)": s.total_raw,
+                      "Remise (BIF)": s.discount_total,
+                      "Total Payé (BIF)": s.total_paid,
+                      "Moyen de Paiement": s.payment_method,
+                      "Type": s.is_reservation ? "Réservation/Acompte" : "Achat Direct",
+                      "Statut": s.status,
+                      "Solde Dû (BIF)": s.balance_due
+                    }));
+                    exportToExcel(data, 'Rapport_Global');
+                  }}
+                  className="bg-[#AA7C11] hover:bg-[#8B650E] text-white px-4 py-2 rounded text-xs uppercase font-bold flex items-center space-x-2 transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Extraire Rapport (Excel)</span>
+                </button>
               </div>
-
-              <div className="bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm flex flex-col justify-between">
-                <div>
-                  <span className="text-[10px] uppercase tracking-widest text-[#D4AF37] font-bold">Bénéfice Net Estimé</span>
-                  <h3 className={`font-serif text-3xl font-bold mt-1 ${stats.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {stats.netProfit.toLocaleString('fr-FR')} €
-                  </h3>
-                </div>
-                <p className="text-[10px] text-stone-400 mt-4 italic">
-                  Recettes - Coût Métal estimé - Charges fixes
-                </p>
-              </div>
-
-              <div className="bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm flex flex-col justify-between">
-                <div>
-                  <span className="text-[10px] uppercase tracking-widest text-stone-400 font-bold">Valeur Financière du Stock</span>
-                  <h3 className="font-serif text-3xl font-medium text-stone-800 mt-1">
-                    {stats.totalVal.toLocaleString('fr-FR')} €
-                  </h3>
-                </div>
-                <p className="text-[9px] text-stone-400 mt-4 leading-none">
-                  Vitrine : <strong className="font-mono text-stone-600">{stats.displayCaseVal.toLocaleString('fr-FR')}€</strong> | Coffre : <strong className="font-mono text-stone-600">{stats.safeVal.toLocaleString('fr-FR')}€</strong>
-                </p>
-              </div>
-
             </div>
 
-            {/* HIGHCHARTS FINANCIAL GRAPH block */}
-            <div className="bg-stone-50 border-2 border-[#EBE7DF] rounded-xl p-6 shadow-xs space-y-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h3 className="font-serif text-lg font-bold text-[#2C251E] flex items-center space-x-2">
-                    <TrendingUp className="h-5 w-5 text-[#AA7C11]" />
-                    <span>Pilotage de Rentabilité Mensuelle & Annuelle</span>
-                  </h3>
-                  <p className="text-xs text-stone-500 font-light mt-0.5">
-                    Modélisation en continu du Chiffre d'Affaire face aux charges et acquisitions matières
-                  </p>
+            {/* Filters Section */}
+            <div className="bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm flex flex-wrap items-end gap-6">
+               <div className="space-y-1">
+                 <span className="block text-[10px] uppercase font-black text-stone-400 tracking-widest">Période du</span>
+                 <input 
+                   type="date" 
+                   className="bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 text-xs focus:ring-2 focus:ring-[#AA7C11] outline-none"
+                   value={dateStart}
+                   onChange={(e) => setDateStart(e.target.value)}
+                 />
+               </div>
+               <div className="space-y-1">
+                 <span className="block text-[10px] uppercase font-black text-stone-400 tracking-widest">Au</span>
+                 <input 
+                   type="date" 
+                   className="bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 text-xs focus:ring-2 focus:ring-[#AA7C11] outline-none"
+                   value={dateEnd}
+                   onChange={(e) => setDateEnd(e.target.value)}
+                 />
+               </div>
+               <button 
+                onClick={() => { setDateStart(''); setDateEnd(''); }}
+                className="bg-stone-100 hover:bg-stone-200 text-stone-600 px-4 py-2 rounded text-xs uppercase font-bold tracking-wider transition-colors h-9"
+               >
+                 Toute l'activité
+               </button>
+            </div>
+
+            {/* Physical Inventory Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-[#14120F] text-white p-6 rounded-xl shadow-md border border-[#2C251E] relative overflow-hidden group">
+                <div className="relative z-10">
+                  <span className="text-[10px] uppercase tracking-widest text-[#D4AF37] font-bold">Catalogue</span>
+                  <div className="text-3xl font-serif font-bold mt-2">{stats.numProducts}</div>
+                  <div className="text-[10px] text-stone-400 mt-1">Articles référencés</div>
                 </div>
-
-                {/* Filter selects matching French luxury styling */}
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-2">
-                    <label className="text-[10px] uppercase font-bold tracking-wider text-[#AA7C11] font-sans">Année</label>
-                    <select 
-                      value={chartYear}
-                      onChange={(e) => setChartYear(Number(e.target.value))}
-                      className="bg-white border border-[#EBE7DF] rounded text-xs px-2 py-1.5 text-stone-800 font-mono focus:border-[#AA7C11] focus:outline-hidden"
-                    >
-                      <option value={2026}>2026</option>
-                      <option value={2025}>2025</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <label className="text-[10px] uppercase font-bold tracking-wider text-[#AA7C11] font-sans">Période</label>
-                    <select 
-                      value={chartMonth}
-                      onChange={(e) => setChartMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                      className="bg-white border border-[#EBE7DF] rounded text-xs px-2.5 py-1.5 text-stone-800 font-sans focus:border-[#AA7C11] focus:outline-hidden"
-                    >
-                      <option value="all">Toute l'année (Mois)</option>
-                      <option value={0}>Janvier</option>
-                      <option value={1}>Février</option>
-                      <option value={2}>Mars</option>
-                      <option value={3}>Avril</option>
-                      <option value={4}>Mai</option>
-                      <option value={5}>Juin</option>
-                      <option value={6}>Juillet</option>
-                      <option value={7}>Août</option>
-                      <option value={8}>Septembre</option>
-                      <option value={9}>Octobre</option>
-                      <option value={10}>Novembre</option>
-                      <option value={11}>Décembre</option>
-                    </select>
-                  </div>
+                <div className="absolute -bottom-4 -right-4 text-white/[0.03] group-hover:scale-110 transition-transform">
+                  <Package className="h-24 w-24" />
                 </div>
               </div>
 
-              {/* Highcharts React element container */}
-              <div className="bg-white rounded-lg p-2 border border-stone-100">
-                <HighchartsReact highcharts={Highcharts} options={highchartsOptions} />
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-[#EBE7DF] relative overflow-hidden group">
+                <div className="relative z-10">
+                  <span className="text-[10px] uppercase tracking-widest text-stone-400 font-bold">Inventaire</span>
+                  <div className="text-3xl font-serif font-bold mt-2 text-stone-850">{stats.totalRemaining}</div>
+                  <div className="text-[10px] text-stone-400 mt-1">Unités en stock</div>
+                </div>
+                <div className="absolute -bottom-4 -right-4 text-stone-50 group-hover:scale-110 transition-transform">
+                  <Layers className="h-24 w-24" />
+                </div>
               </div>
 
-              {/* Dynamic message explaining profits or losses */}
-              <div className="p-4 rounded-lg bg-[#FAF9F5] border border-[#EBE7DF] flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-xs">
-                <div>
-                  <span className="font-bold text-stone-700 block uppercase tracking-wider text-[10px] font-sans">
-                    Analyse & Audit de Rentabilité de seneFashion
-                  </span>
-                  <div className="mt-1 font-light text-stone-500 max-w-2xl leading-relaxed">
-                    Ce graphique compare vos revenus issus des transactions directes aux charges fixes de restructuration ou de fonctionnement de l'Atelier. Un bénéfice net positif en or ou argent reflète la croissance des commissions de prestige.
-                  </div>
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-[#EBE7DF] relative overflow-hidden group">
+                <div className="relative z-10">
+                   <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">Ventes</span>
+                   <div className="text-3xl font-serif font-bold mt-2 text-emerald-600">{stats.totalSold}</div>
+                   <div className="text-[10px] text-stone-400 mt-1">Pièces vendues</div>
                 </div>
+                <div className="absolute -bottom-4 -right-4 text-emerald-50 group-hover:scale-110 transition-transform">
+                  <TrendingUp className="h-24 w-24" />
+                </div>
+              </div>
 
-                <div className="text-right">
-                  <span className="text-[9px] uppercase tracking-widest text-[#AA7C11] block font-mono">FINANCES CONSOLIDÉES</span>
-                  <div className="mt-1 flex items-center space-x-2">
-                    <span className="font-bold text-stone-800">Résultat de la Sélection :</span>
-                    {chartData.profit.reduce((a, b) => a + b, 0) >= 0 ? (
-                      <span className="px-2.5 py-1 bg-emerald-150 border border-emerald-400 text-emerald-800 font-black font-sans rounded uppercase text-[10px] tracking-wider">
-                        ✓ BÉNÉFICE CONVOLU (Gain)
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-1 bg-rose-100 border border-rose-300 text-rose-800 font-bold font-sans rounded uppercase text-[10px] tracking-wider animate-pulse">
-                        ⚠ EXCÉDENT NÉGATIF (Perte)
-                      </span>
-                    )}
-                  </div>
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-[#EBE7DF] relative overflow-hidden group">
+                <div className="relative z-10">
+                  <span className="text-[10px] uppercase tracking-widest text-rose-400 font-bold">Flux Sortant</span>
+                  <div className="text-3xl font-serif font-bold mt-2 text-rose-500">{stats.totalExited}</div>
+                  <div className="text-[10px] text-stone-400 mt-1">Hors-ventes / Retrait</div>
                 </div>
+                 <div className="absolute -bottom-4 -right-4 text-rose-50 group-hover:scale-110 transition-transform">
+                  <TrendingDown className="h-24 w-24" />
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Analysis */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-12 bg-white border border-[#EBE7DF] rounded-xl overflow-hidden shadow-sm">
+                 <div className="bg-[#FAF9F5] px-6 py-4 border-b border-[#EBE7DF] flex justify-between items-center">
+                    <h3 className="font-serif text-lg font-bold">Bilan de Gestion (BIF)</h3>
+                    <span className="text-[10px] font-mono text-stone-400">Période : {dateStart || 'Initial'} au {dateEnd || 'Aujourd\'hui'}</span>
+                 </div>
+                 
+                 <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-12">
+                    <div className="space-y-4">
+                       <div className="flex items-center space-x-3">
+                          <div className="h-10 w-10 bg-emerald-50 rounded-full flex items-center justify-center">
+                             <CircleDollarSign className="h-6 w-6 text-emerald-600" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider">Chiffre d'Affaires</span>
+                            <div className="text-xl font-mono font-black text-emerald-600">{stats.revenue.toLocaleString()} BIF</div>
+                          </div>
+                       </div>
+                       <p className="text-[10px] text-stone-500 font-light">Revenus Bruts des ventes (TVA incluse si appliquée).</p>
+                    </div>
+
+                    <div className="space-y-4">
+                       <div className="flex items-center space-x-3">
+                          <div className="h-10 w-10 bg-rose-50 rounded-full flex items-center justify-center">
+                             <Wallet2 className="h-6 w-6 text-rose-500" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider">Investissement Achat</span>
+                            <div className="text-xl font-mono font-black text-rose-600">-{stats.totalStockCost.toLocaleString()} BIF</div>
+                          </div>
+                       </div>
+                       <p className="text-[10px] text-stone-500 font-light">Coût total d'acquisition des stocks entrés.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                       <div className="flex items-center space-x-3">
+                          <div className="h-10 w-10 bg-stone-100 rounded-full flex items-center justify-center">
+                             <CreditCard className="h-6 w-6 text-stone-600" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-stone-400 block tracking-wider">Autres Dépenses</span>
+                            <div className="text-xl font-mono font-black text-stone-800">-{stats.expenses.toLocaleString()} BIF</div>
+                          </div>
+                       </div>
+                       <p className="text-[10px] text-stone-500 font-light">Charges fixes, salaires et frais de fonctionnement.</p>
+                    </div>
+                 </div>
+
+                 <div className={`p-8 border-t flex flex-col md:flex-row justify-between items-center gap-6 ${stats.globalNetBalance >= 0 ? 'bg-emerald-50/20' : 'bg-rose-50/20'}`}>
+                    <div className="flex items-center space-x-4">
+                       <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shadow-sm ${stats.globalNetBalance >= 0 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
+                          {stats.globalNetBalance >= 0 ? <PlusCircle className="h-8 w-8" /> : <MinusCircle className="h-8 w-8" />}
+                       </div>
+                       <div>
+                          <h4 className="text-[11px] uppercase font-black tracking-widest text-stone-400">Balance Nette</h4>
+                          <div className={`text-4xl font-serif font-black ${stats.globalNetBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {stats.globalNetBalance.toLocaleString()} <span className="text-xl">BIF</span>
+                          </div>
+                       </div>
+                    </div>
+
+                    <div className="text-center md:text-right">
+                       <div className={`inline-block px-6 py-2 rounded-full font-serif font-bold uppercase tracking-[0.2em] text-xs border-2 ${stats.globalNetBalance >= 0 ? 'bg-emerald-100 border-emerald-500 text-emerald-800' : 'bg-rose-100 border-rose-500 text-rose-800'}`}>
+                          {stats.globalNetBalance >= 0 ? 'Résultat Excédentaire' : 'Déséquilibre Financier'}
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Chart Visualizer */}
+              <div className="lg:col-span-12 bg-white border border-[#EBE7DF] rounded-xl p-8 shadow-sm">
+                 <div className="flex justify-between items-center mb-8">
+                    <h3 className="font-serif text-lg font-bold">Courbes de Performance Financière</h3>
+                    <div className="flex space-x-2">
+                       <select className="bg-stone-50 border border-stone-200 rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider outline-none cursor-pointer">
+                          <option>Affichage Annuel (Consolidé)</option>
+                       </select>
+                    </div>
+                 </div>
+                 <div className="h-96">
+                   <HighchartsReact
+                     highcharts={Highcharts}
+                     options={{
+                       chart: { type: 'areaspline', backgroundColor: 'transparent', style: { fontFamily: 'inherit' } },
+                       title: { text: null },
+                       xAxis: { categories: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'], gridLineWidth: 0, labels: { style: { color: '#9CA3AF' } } },
+                       yAxis: { title: { text: null }, gridLineColor: '#F3F4F6', labels: { format: '{value} BIF', style: { color: '#9CA3AF' } } },
+                       tooltip: { shared: true, valueSuffix: ' BIF', borderRadius: 12, borderWidth: 0, shadow: true },
+                       credits: { enabled: false },
+                       plotOptions: { areaspline: { fillOpacity: 0.1, lineWidth: 4, marker: { radius: 0, states: { hover: { radius: 6 } } } } },
+                       series: [{ name: 'Chiffre d\'Affaires', data: chartData.income, color: '#AA7C11' }, { name: 'Dépenses & Achats', data: chartData.expenses, color: '#2C251E' }]
+                     }}
+                   />
+                 </div>
               </div>
             </div>
 
@@ -2039,10 +2017,9 @@ export default function AdminDashboard({
                     <tr className="bg-stone-50 border-b border-stone-100 text-stone-450 uppercase text-[9px] tracking-wider font-semibold">
                       <th className="p-4">Bijou / SKU</th>
                       <th className="p-4 mr-2">Catégorie</th>
-                      <th className="p-4">Métal & Titrage</th>
+                      <th className="p-4">Métal</th>
                       <th className="p-4 text-right">Poids Net</th>
-                      <th className="p-4 text-center">Formule de Prix</th>
-                      <th className="p-4 text-right text-[#AA7C11]">Prix Estimé</th>
+                      <th className="p-4 text-right text-[#AA7C11]">Prix de Vente</th>
                       <th className="p-4 text-center">Vitrine</th>
                       <th className="p-4 text-center">Stock</th>
                       <th className="p-4 text-center">Actions</th>
@@ -2065,22 +2042,10 @@ export default function AdminDashboard({
                           <td className="p-4 font-sans font-medium text-stone-500">{p.category}</td>
                           <td className="p-4">
                             <span className="text-xs font-semibold text-stone-700 block">{p.metal_type}</span>
-                            <span className="text-[10px] text-stone-400">{p.purity}</span>
                           </td>
                           <td className="p-4 text-right font-mono font-bold text-stone-800">{p.weight.toFixed(2)} g</td>
-                          <td className="p-4 text-center">
-                            {p.price_type === 'variable' ? (
-                              <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-150 rounded text-[9px]">
-                                Métal + {p.labor_cost}€ Façon
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 bg-stone-100 text-stone-600 rounded text-[9px]">
-                                Fixe Unique
-                              </span>
-                            )}
-                          </td>
                           <td className="p-4 text-right font-serif font-bold text-[#AA7C11] text-sm">
-                            {estimated.toLocaleString('fr-FR')} €
+                            {estimated.toLocaleString('fr-FR')} BIF
                           </td>
                           <td className="p-4 text-center">
                             <span className={`inline-block w-2.5 h-2.5 rounded-full ${p.visible_en_ligne ? 'bg-emerald-500' : 'bg-stone-300'}`} title={p.visible_en_ligne ? 'Affiché en ligne' : 'Masqué en ligne'} />
@@ -2872,34 +2837,19 @@ export default function AdminDashboard({
                       <thead>
                         <tr className="bg-stone-50 border-b border-stone-200 text-stone-450 uppercase text-[9px] tracking-wider font-semibold">
                           <th className="p-3">Identité & Contact</th>
-                          <th className="p-3 text-center">Bague (Taille)</th>
-                          <th className="p-3 text-center">Métal fétiche</th>
-                          <th className="p-3 text-center">Anniversaire</th>
-                          <th className="p-3">Préférences de Style / Historique</th>
+                          <th className="p-3">Numéro CNI / Passeport</th>
                           <th className="p-3 text-center">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-stone-100">
                         {clients.map(c => {
-                          const hasBdayToday = c.birthday && new Date(c.birthday).getMonth() === new Date().getMonth() && new Date(c.birthday).getDate() === new Date().getDate();
-
                           return (
-                            <tr key={c.id} className={`hover:bg-stone-50/60 ${hasBdayToday ? 'bg-amber-50/40 border-l-4 border-amber-400' : ''}`}>
+                            <tr key={c.id} className="hover:bg-stone-50/60">
                               <td className="p-3">
-                                <span className="font-serif font-bold text-stone-900 block">{c.name}</span>
+                                <span className="font-serif font-bold text-stone-900 block">{c.firstName} {c.lastName}</span>
                                 <span className="text-[10px] text-stone-400 font-mono block">{c.phone} | {c.email}</span>
                               </td>
-                              <td className="p-3 text-center font-mono font-bold text-stone-800">{c.ring_size || "N/A"}</td>
-                              <td className="p-3 text-center font-semibold text-stone-500">{c.metal_preference}</td>
-                              <td className="p-3 text-center font-mono">
-                                {c.birthday ? new Date(c.birthday).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : "N/D"}
-                                {hasBdayToday && (
-                                  <span className="block text-[8px] bg-[#D4AF37] text-stone-900 px-1 py-0.5 rounded font-bold uppercase mt-1">Bougies !</span>
-                                )}
-                              </td>
-                              <td className="p-3 font-light leading-relaxed max-w-sm">
-                                {c.notes_style || "Aucun détail saisi pour le moment."}
-                              </td>
+                              <td className="p-3 font-mono">{c.idCardNumber}</td>
                               <td className="p-3 text-center">
                                 <div className="flex items-center justify-center space-x-1">
                                   <button
@@ -2936,6 +2886,301 @@ export default function AdminDashboard({
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* --- TAB: STOCK ENTRY --- */}
+        {activeTab === 'stock_entry' && (
+          <div className="space-y-8 animate-fade-in text-xs text-stone-700 font-sans">
+             <div className="bg-[#14120F] text-white border border-[#2C251E] rounded-xl p-6 shadow-md flex justify-between items-center">
+                <div>
+                  <h3 className="font-serif text-lg text-[#D4AF37] font-bold tracking-wide">Entrée en Stock</h3>
+                  <p className="text-stone-400 text-xs mt-1 font-light">Enregistrez les nouveaux arrivages de produits.</p>
+                </div>
+                <button 
+                  onClick={() => exportToExcel(movements.filter(m => m.type === 'entree'), 'entrees_stock')}
+                  className="bg-stone-800 hover:bg-stone-700 text-white px-4 py-2 rounded text-[10px] uppercase font-bold"
+                >
+                  Exporter CSV
+                </button>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               <div className="md:col-span-1 bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm">
+                 <h4 className="font-serif text-base mb-4">Nouvelle Entrée</h4>
+                 <div className="space-y-4">
+                    <div className="space-y-1">
+                      <span className="block text-[10px] uppercase font-bold text-stone-400">Article (SKU)</span>
+                      <select 
+                        className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                        onChange={(e) => setEntrySku(e.target.value)}
+                        value={entrySku}
+                      >
+                        <option value="">Sélectionner...</option>
+                        {products.map(p => <option key={p.sku} value={p.sku}>{p.designation} ({p.sku})</option>)}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <span className="block text-[10px] uppercase font-bold text-stone-400">Quantité</span>
+                        <input 
+                          type="number" 
+                          className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                          value={entryQty}
+                          onChange={(e) => setEntryQty(Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="block text-[10px] uppercase font-bold text-stone-400">Prix Achat Unitaire</span>
+                        <input 
+                          type="number" 
+                          className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                          value={entryCost}
+                          onChange={(e) => setEntryCost(Number(e.target.value))}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="block text-[10px] uppercase font-bold text-stone-400">Fournisseur / Origine</span>
+                      <input 
+                        type="text" 
+                        className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                        value={entryPartner}
+                        onChange={(e) => setEntryPartner(e.target.value)}
+                      />
+                    </div>
+                    <button 
+                      onClick={handleSubmitSimpleEntry}
+                      className="w-full bg-[#AA7C11] hover:bg-[#8B650D] text-white py-3 rounded-lg font-bold uppercase tracking-wider transition-colors mt-2"
+                    >
+                      Valider l'Entrée
+                    </button>
+                 </div>
+               </div>
+
+               <div className="md:col-span-2 bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm overflow-x-auto">
+                 <h4 className="font-serif text-base mb-4">Historique des Entrées</h4>
+                 <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-stone-200 text-[10px] uppercase font-bold text-stone-400">
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Article</th>
+                      <th className="p-3">Quantité</th>
+                      <th className="p-3">Fournisseur</th>
+                      <th className="p-3">Achat (BIF)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movements.filter(m => m.type === 'entree').map(m => (
+                      <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50">
+                        <td className="p-3 font-mono">{new Date(m.date).toLocaleDateString()}</td>
+                        <td className="p-3 font-semibold">{m.sku}</td>
+                        <td className="p-3">{m.qty}</td>
+                        <td className="p-3">{m.partner_name}</td>
+                        <td className="p-3 font-mono">{m.purchase_price?.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                 </table>
+               </div>
+             </div>
+          </div>
+        )}
+
+        {/* --- TAB: STOCK EXIT --- */}
+        {activeTab === 'stock_exit' && (
+          <div className="space-y-8 animate-fade-in text-xs text-stone-700 font-sans">
+             <div className="bg-[#14120F] text-white border border-[#2C251E] rounded-xl p-6 shadow-md flex justify-between items-center">
+                <div>
+                  <h3 className="font-serif text-lg text-[#D4AF37] font-bold tracking-wide">Sortie de Stock</h3>
+                  <p className="text-stone-400 text-xs mt-1 font-light">Enregistrez les sorties, ventes ou pertes de produits.</p>
+                </div>
+                <button 
+                  onClick={() => exportToExcel(movements.filter(m => m.type === 'sortie'), 'sorties_stock')}
+                  className="bg-stone-800 hover:bg-stone-700 text-white px-4 py-2 rounded text-[10px] uppercase font-bold"
+                >
+                  Exporter CSV
+                </button>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               <div className="md:col-span-1 bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm">
+                 <h4 className="font-serif text-base mb-4">Nouvelle Sortie</h4>
+                 <div className="space-y-4">
+                    <div className="space-y-1">
+                      <span className="block text-[10px] uppercase font-bold text-stone-400">Article (SKU)</span>
+                      <select 
+                        className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                        onChange={(e) => setExitSku(e.target.value)}
+                        value={exitSku}
+                      >
+                        <option value="">Sélectionner...</option>
+                        {products.map(p => <option key={p.sku} value={p.sku}>{p.designation} ({p.sku})</option>)}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <span className="block text-[10px] uppercase font-bold text-stone-400">Quantité</span>
+                        <input 
+                          type="number" 
+                          className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                          value={exitQty}
+                          onChange={(e) => setExitQty(Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="block text-[10px] uppercase font-bold text-stone-400">Raison</span>
+                        <select 
+                          className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                          value={exitType}
+                          onChange={(e) => setExitType(e.target.value as any)}
+                        >
+                          <option value="sortie_vente">Vente</option>
+                          <option value="sortie_perte_vol">Perte/Vol</option>
+                          <option value="autre">Autre</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="block text-[10px] uppercase font-bold text-stone-400">Client / Destinataire</span>
+                      <input 
+                        type="text" 
+                        className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                        placeholder="Laisser vide si vente CRM"
+                        value={exitPartner}
+                        onChange={(e) => setExitPartner(e.target.value)}
+                      />
+                    </div>
+                    <button 
+                      onClick={handleSubmitSimpleExit}
+                      className="w-full bg-stone-850 hover:bg-black text-white py-3 rounded-lg font-bold uppercase tracking-wider transition-colors mt-2"
+                    >
+                      Valider la Sortie
+                    </button>
+                 </div>
+               </div>
+
+               <div className="md:col-span-2 bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm overflow-x-auto">
+                 <h4 className="font-serif text-base mb-4">Historique des Sorties</h4>
+                 <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-stone-200 text-[10px] uppercase font-bold text-stone-400">
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Article</th>
+                      <th className="p-3">Quantité</th>
+                      <th className="p-3">Motif</th>
+                      <th className="p-3">Gain (BIF)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movements.filter(m => m.type === 'sortie').map(m => (
+                      <tr key={m.id} className="border-b border-stone-100 hover:bg-stone-50">
+                        <td className="p-3 font-mono">{new Date(m.date).toLocaleDateString()}</td>
+                        <td className="p-3 font-semibold">{m.sku}</td>
+                        <td className="p-3">{m.qty}</td>
+                        <td className="p-3">{m.reason}</td>
+                        <td className="p-3 font-mono">{m.selling_price?.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                 </table>
+               </div>
+             </div>
+          </div>
+        )}
+
+        {/* --- TAB: MANAGEMENT (CATEGORIES & METALS) --- */}
+        {activeTab === 'management' && (
+          <div className="space-y-8 animate-fade-in text-xs text-stone-700 font-sans">
+             <div className="bg-[#14120F] text-white border border-[#2C251E] rounded-xl p-6 shadow-md">
+                <h3 className="font-serif text-lg text-[#D4AF37] font-bold tracking-wide">Gestion des Catégories & Alliages</h3>
+                <p className="text-stone-400 text-xs mt-1 font-light">Gérez les structures de base de votre catalogue.</p>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Categories Management */}
+                <div className="bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm space-y-6">
+                  <h4 className="font-serif text-base border-b pb-2">Catégories de Bijoux</h4>
+                  <div className="flex space-x-2">
+                    <input 
+                      id="newCatName"
+                      type="text" 
+                      placeholder="Nom de la catégorie..."
+                      className="flex-1 bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                    />
+                    <button 
+                      onClick={() => {
+                        const val = (document.getElementById('newCatName') as HTMLInputElement).value;
+                        handleAddCategory(val);
+                        (document.getElementById('newCatName') as HTMLInputElement).value = '';
+                      }}
+                      className="bg-[#AA7C11] text-white px-4 py-2 rounded font-bold uppercase text-[10px]"
+                    >
+                      Ajouter
+                    </button>
+                  </div>
+                  <div className="divide-y divide-stone-100 max-h-[300px] overflow-y-auto">
+                    {categories.map(cat => (
+                      <div key={cat.id} className="py-3 flex justify-between items-center group">
+                        <span className="font-semibold text-stone-800">{cat.name}</span>
+                        <button 
+                          onClick={() => handleDeleteCategory(cat.id)}
+                          className="text-stone-300 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Metals Management */}
+                <div className="bg-white border border-[#EBE7DF] rounded-xl p-6 shadow-sm space-y-6">
+                  <h4 className="font-serif text-base border-b pb-2">Alliages & Cours (BIF/g)</h4>
+                  <div className="space-y-3 bg-stone-50 p-4 rounded-lg">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input id="newMetalName" type="text" placeholder="Nom métal..." className="bg-white border border-stone-300 rounded px-3 py-2" />
+                      <input id="newMetalRate" type="number" placeholder="BIF/g" className="bg-white border border-stone-300 rounded px-3 py-2" />
+                    </div>
+                    <button 
+                      onClick={() => {
+                        const name = (document.getElementById('newMetalName') as HTMLInputElement).value;
+                        const rate = Number((document.getElementById('newMetalRate') as HTMLInputElement).value);
+                        handleAddMetal(name, rate);
+                        (document.getElementById('newMetalName') as HTMLInputElement).value = '';
+                        (document.getElementById('newMetalRate') as HTMLInputElement).value = '';
+                      }}
+                      className="w-full bg-[#14120F] text-white py-2 rounded font-bold uppercase text-[10px]"
+                    >
+                      Enregistrer nouvel alliage
+                    </button>
+                  </div>
+                  <div className="divide-y divide-stone-100 max-h-[300px] overflow-y-auto">
+                    {metals.map(m => (
+                      <div key={m.id} className="py-3 flex justify-between items-center group">
+                        <div className="flex-1">
+                          <span className="font-semibold text-stone-800 block">{m.name}</span>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <input 
+                              type="number"
+                              className="w-24 bg-white border border-stone-200 rounded px-2 py-0.5 text-[10px] font-mono"
+                              defaultValue={m.rate_bif_per_g}
+                              onBlur={(e) => handleUpdateMetalRate(m.id, Number(e.target.value))}
+                            />
+                            <span className="text-[9px] text-stone-400 font-mono italic">BIF / gramme</span>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteMetal(m.id)}
+                          className="text-stone-300 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+             </div>
           </div>
         )}
 
@@ -3390,7 +3635,7 @@ export default function AdminDashboard({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Category Selection */}
                 <div className="space-y-1">
                   <span className="block text-[10px] uppercase font-bold text-stone-400">Catégorie</span>
@@ -3399,11 +3644,9 @@ export default function AdminDashboard({
                     onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value as CategoryType })}
                     className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 font-medium focus:outline-none focus:border-[#AA7C11]"
                   >
-                    <option value="Bagues">Bagues</option>
-                    <option value="Colliers">Colliers</option>
-                    <option value="Bracelets">Bracelets</option>
-                    <option value="Boucles d'oreilles">Boucles d'oreilles</option>
-                    <option value="Montres">Montres</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.name}>{cat.name}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -3415,25 +3658,10 @@ export default function AdminDashboard({
                     onChange={(e) => setNewProduct({ ...newProduct, metal_type: e.target.value as MetalType })}
                     className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-2.5 py-2 font-medium focus:outline-none focus:border-[#AA7C11]"
                   >
-                    <option value="Or Jaune">Or Jaune</option>
-                    <option value="Or Blanc">Or Blanc</option>
-                    <option value="Or Rose">Or Rose</option>
-                    <option value="Argent">Argent</option>
-                    <option value="Platine">Platine</option>
+                    {metals.map(m => (
+                      <option key={m.id} value={m.name}>{m.name}</option>
+                    ))}
                   </select>
-                </div>
-
-                {/* Titrage */}
-                <div className="space-y-1">
-                  <span className="block text-[10px] uppercase font-bold text-stone-400">Titrage & Titre</span>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: 18k (750/1000)"
-                    value={newProduct.purity}
-                    onChange={(e) => setNewProduct({ ...newProduct, purity: e.target.value })}
-                    className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 focus:outline-none focus:border-[#AA7C11]"
-                  />
                 </div>
               </div>
 
@@ -3465,48 +3693,18 @@ export default function AdminDashboard({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Pricing Type */}
+                {/* Price */}
                 <div className="space-y-1">
-                  <span className="block text-[10px] uppercase font-bold text-stone-400">Mécanisme de Prix</span>
-                  <select
-                    value={newProduct.price_type}
-                    onChange={(e) => setNewProduct({ ...newProduct, price_type: e.target.value as 'variable' | 'fixe' })}
-                    className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-2.5 py-2 font-semibold focus:outline-none focus:border-[#AA7C11]"
-                  >
-                    <option value="variable">Formule Fluctuante (Cours Bourse + Façon)</option>
-                    <option value="fixe">Montant Fixe Indépendant</option>
-                  </select>
+                  <span className="block text-[10px] uppercase font-bold text-[#AA7C11]">Prix de Vente Direct (BIF)</span>
+                  <input
+                    type="number"
+                    required
+                    placeholder="Ex: 1500000"
+                    value={newProduct.price_fixed}
+                    onChange={(e) => setNewProduct({ ...newProduct, price_fixed: Number(e.target.value), price_type: 'fixe' })}
+                    className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 font-mono font-semibold focus:outline-none focus:border-[#AA7C11]"
+                  />
                 </div>
-
-                {/* Value mapping (depends on type) */}
-                {newProduct.price_type === 'variable' ? (
-                  <div className="space-y-1 border-l-2 border-[#AA7C11] pl-3 bg-amber-50/20 py-1 rounded">
-                    <span className="block text-[10px] uppercase font-bold text-[#AA7C11]">Coût de Façon Artisanale (€)</span>
-                    <input
-                      type="number"
-                      required
-                      placeholder="Ex: 250"
-                      value={newProduct.labor_cost}
-                      onChange={(e) => setNewProduct({ ...newProduct, labor_cost: Number(e.target.value) })}
-                      className="w-full bg-[#FAF9F5] border border-[#AA7C11] rounded px-3 py-1.5 font-mono focus:outline-none animate-fade-in"
-                    />
-                    <p className="text-[9px] text-stone-500 italic mt-0.5 leading-none">
-                      Calculé selon : (Poids × Cours du jour) + Façon d'atelier × Coefficient de marge.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1 border-l-2 border-stone-600 pl-3 bg-stone-50 py-1 rounded">
-                    <span className="block text-[10px] uppercase font-bold text-stone-700">Prix de Vente Fixe Brut (€)</span>
-                    <input
-                      type="number"
-                      required
-                      placeholder="Ex: 1450"
-                      value={newProduct.price_fixed}
-                      onChange={(e) => setNewProduct({ ...newProduct, price_fixed: Number(e.target.value) })}
-                      className="w-full bg-[#FAF9F5] border border-stone-400 rounded px-3 py-1.5 font-mono focus:outline-none animate-fade-in"
-                    />
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3658,16 +3856,27 @@ export default function AdminDashboard({
                 </div>
               )}
 
-              <div className="space-y-1">
-                <span className="block text-[10px] uppercase font-bold text-stone-400">Nom Complet d'Exception</span>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Vicomtesse de Noailles"
-                  value={newClient.name}
-                  onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
-                  className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 text-stone-900 font-bold focus:outline-none focus:border-[#AA7C11]"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <span className="block text-[10px] uppercase font-bold text-stone-400">Prénom</span>
+                  <input
+                    type="text"
+                    required
+                    value={newClient.firstName || ''}
+                    onChange={(e) => setNewClient({ ...newClient, firstName: e.target.value })}
+                    className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 text-stone-900 font-bold focus:outline-none focus:border-[#AA7C11]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="block text-[10px] uppercase font-bold text-stone-400">Nom</span>
+                  <input
+                    type="text"
+                    required
+                    value={newClient.lastName || ''}
+                    onChange={(e) => setNewClient({ ...newClient, lastName: e.target.value })}
+                    className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 text-stone-900 font-bold focus:outline-none focus:border-[#AA7C11]"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -3675,7 +3884,7 @@ export default function AdminDashboard({
                 <input
                   type="text"
                   required
-                  placeholder="Ex: +33 6 44 55 66"
+                  placeholder="Ex: +257 79 00 00 00"
                   value={newClient.phone}
                   onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
                   className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 font-mono focus:outline-none focus:border-[#AA7C11]"
@@ -3686,59 +3895,22 @@ export default function AdminDashboard({
                 <span className="block text-[10px] uppercase font-bold text-stone-400">Adresse Courriel</span>
                 <input
                   type="email"
-                  placeholder="Ex: v.noailles@email.com"
+                  placeholder="Ex: client@email.com"
                   value={newClient.email || ''}
                   onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
                   className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 focus:outline-none focus:border-[#AA7C11]"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <span className="block text-[10px] uppercase font-bold text-stone-400">Taille de Bague</span>
-                  <input
-                    type="text"
-                    placeholder="Ex: 54"
-                    value={newClient.ring_size || ''}
-                    onChange={(e) => setNewClient({ ...newClient, ring_size: e.target.value })}
-                    className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 text-center font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <span className="block text-[10px] uppercase font-bold text-stone-400">Métal Préféré</span>
-                  <select
-                    value={newClient.metal_preference || 'Or Jaune'}
-                    onChange={(e) => setNewClient({ ...newClient, metal_preference: e.target.value })}
-                    className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-2.5 py-2 font-semibold"
-                  >
-                    <option value="Or Jaune">Or Jaune</option>
-                    <option value="Or Blanc">Or Blanc</option>
-                    <option value="Or Rose">Or Rose</option>
-                    <option value="Argent">Argent</option>
-                    <option value="Platine">Platine</option>
-                  </select>
-                </div>
-              </div>
-
               <div className="space-y-1">
-                <span className="block text-[10px] uppercase font-bold text-stone-400">Date d'Anniversaire</span>
+                <span className="block text-[10px] uppercase font-bold text-stone-400">Numéro Carte d'Identité</span>
                 <input
-                  type="date"
-                  value={newClient.birthday || ''}
-                  onChange={(e) => setNewClient({ ...newClient, birthday: e.target.value })}
-                  className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 text-stone-600 font-medium"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <span className="block text-[10px] uppercase font-bold text-stone-400">Notes & Préférences Esthétiques</span>
-                <textarea
-                  rows={2}
-                  placeholder="Prélèvements passés, solitaires épurés, diamants taille brillant..."
-                  value={newClient.notes_style || ''}
-                  onChange={(e) => setNewClient({ ...newClient, notes_style: e.target.value })}
-                  className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2"
+                  type="text"
+                  required
+                  placeholder="Numéro de CNI / Passeport"
+                  value={newClient.idCardNumber || ''}
+                  onChange={(e) => setNewClient({ ...newClient, idCardNumber: e.target.value })}
+                  className="w-full bg-[#FAF9F5] border border-stone-300 rounded px-3 py-2 focus:outline-none focus:border-[#AA7C11]"
                 />
               </div>
 
